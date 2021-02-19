@@ -9,17 +9,12 @@ Use test and development (10k each)
 """
 import random
 import numpy as np
-import tqdm
-import sklearn.model_selection as sel
-import sklearn.metrics as metrics
-import sklearn.linear_model as lm
 import sklearn.preprocessing as pre
-import json
-from pathlib import Path
 import distance
 import nltk
 import string
 
+from common import Sentence
 
 
 def levenshtein(s1, s2, del_cost, insert_cost, subs_cost, normalize=False):
@@ -49,17 +44,6 @@ def levenshtein(s1, s2, del_cost, insert_cost, subs_cost, normalize=False):
     return table[(len(s1), len(s2))]
 
 
-punct = set(string.punctuation)
-
-
-@dataclass
-class Sentence:
-    s: str
-
-    def lowercase_tokens(self):
-        return [x for x in nltk.wordpunct_tokenize(self.s.lower()) if len(set(x) & punct) == 0]
-
-
 class EditDistanceI:
     def distance(self, s1: Sentence, s2: Sentence) -> float:
         raise NotImplementedError
@@ -67,7 +51,7 @@ class EditDistanceI:
 
 class NormalizedLevenshtein(EditDistanceI):
     def distance(self, s1: Sentence, s2: Sentence) -> float:
-        return distance.nlevenshtein(s1.lowercase_tokens(), s2.lowercase_tokens())
+        return [distance.nlevenshtein(s1.lowercase_tokens(), s2.lowercase_tokens())]
 
 
 @dataclass
@@ -78,14 +62,16 @@ class TunedNormalizedLevenshtein(EditDistanceI):
     normalize: bool = False
 
     def distance(self, s1: Sentence, s2: Sentence) -> float:
-        return levenshtein(
-            s1.lowercase_tokens(),
-            s2.lowercase_tokens(),
-            self.del_cost,
-            self.insert_cost,
-            self.subs_cost,
-            self.normalize,
-        )
+        return [
+            levenshtein(
+                s1.lowercase_tokens(),
+                s2.lowercase_tokens(),
+                self.del_cost,
+                self.insert_cost,
+                self.subs_cost,
+                self.normalize,
+            )
+        ]
 
 
 def sigmoid(v):
@@ -104,9 +90,6 @@ class WVEditDistance:
 
     def __repr__(self):
         return f"WVEditDistance(w={self.w}, b={self.b}, lambda_={self.lambda_}, mu={self.mu})"
-
-    def distance(self, s1: Sentence, s2: Sentence) -> float:
-        raise NotImplementedError
 
     @classmethod
     def load(cls, w: float, b: float, lambda_: float, mu: float):
@@ -179,56 +162,9 @@ class WVEditDistance:
         return table[(len(s1), len(s2))]
 
     def distance(self, s1: Sentence, s2: Sentence) -> float:
-        return self.wv_levenshtein(
-            s1.lowercase_tokens(),
-            s2.lowercase_tokens(),
-        )
-
-
-def two_class_data_iter(which):
-    assert which in ["dev", "test", "train"]
-
-    base_path = Path("/home/nrg/datasets/snli_1.0/snli_1.0")
-
-    f = base_path / f"snli_1.0_{which}.jsonl"
-
-    with f.open() as i:
-        for line in i:
-            loaded = json.loads(line)
-            yield (
-                (Sentence(loaded["sentence1"]), Sentence(loaded["sentence2"])),
-                loaded["gold_label"] == "entailment"
+        return [
+            self.wv_levenshtein(
+                s1.lowercase_tokens(),
+                s2.lowercase_tokens(),
             )
-
-
-def evaluate(model: EditDistanceI, which="dev"):
-    X, y = [], []
-
-    for (s1, s2), label in two_class_data_iter(which):
-        d = model.distance(s1, s2)
-
-        X.append([d])
-        y.append(label)
-
-    scores = sel.cross_validate(
-        lm.LogisticRegression(),
-        X,
-        y=y,
-        scoring=metrics.make_scorer(metrics.accuracy_score),
-        cv=sel.StratifiedShuffleSplit(n_splits=5),
-    )
-
-    print(scores)
-
-
-def main():
-    #evaluate(TunedNormalizedLevenshtein())
-
-
-    for _ in range(10):
-        wved = WVEditDistance.load_random()
-        print(wved)
-        evaluate(wved)
-
-if __name__ == "__main__":
-    main()
+        ]
