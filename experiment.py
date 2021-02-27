@@ -82,18 +82,6 @@ def evaluate(model, which="dev"):
 
 def hyperparams_test(model, n=20):
 
-    # models = [
-    #     WVEditDistance.load(),
-    #     TunedNormalizedLevenshtein(del_cost=.5),
-    #     BipartiteGraphSim.load(),
-    #     TreeEditDistance()
-    # ]
-
-    #evaluate(Multi([BipartiteGraphSim.load(), TunedNormalizedLevenshtein(del_cost=.5)]))
-
-    # for (s1, s2), label in three_class_data_iter(which):
-    #     TreeEditDistance
-
     results = []
 
     for _ in tqdm.tqdm(range(n)):

@@ -4,3 +4,4 @@ scikit-learn
 nltk
 git+https://github.com/timtadh/zhang-shasha.git
 wordfreq
+distance-metrics
