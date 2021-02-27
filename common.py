@@ -1,3 +1,4 @@
+import numpy as np
 import nltk
 import string
 from dataclasses import dataclass
@@ -28,7 +29,7 @@ class Sentence:
         return _to_tree(t)
 
 
-class Multi:
+class MultiModel:
     def __init__(self, models):
         self.models = models
 
@@ -37,3 +38,8 @@ class Multi:
         for model in self.models:
             rval.extend(model.distance(s1, s2))
         return rval
+
+
+def sigmoid(v):
+    e_v = np.exp(v)
+    return e_v / (e_v + 1)
