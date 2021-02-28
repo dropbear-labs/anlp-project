@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
-from collections import Counter
+from collections import Counter, defaultdict
 
+import tabulate
+import pandas as pd
 import numpy as np
 import more_itertools as mit
 import tqdm
@@ -14,7 +16,7 @@ from common import Sentence
 from word_vector_edit_distance import WVEditDistance, TunedNormalizedLevenshtein, CharBasedTunedLevenshtein, WVEditDistanceV2
 from bipartite_graph_similarity import BipartiteGraphSim, TunedBipartiteGraphSim
 from tree_edit_distance import TreeEditDistance
-from string_distance import LongestCommonSubsequence, Bakkelund
+from string_distance import LongestCommonSubsequence, Bakkelund, LengthDiff, LengthSum
 
 
 base_path = Path("/home/nrg/datasets/snli_1.0/snli_1.0")
@@ -65,7 +67,6 @@ def evaluate(model, which="dev"):
 
     for (s1, s2), label in three_class_data_iter(which):
         d = model.distance(s1, s2)
-        #print(d)
         X.append(d)
         y.append(label)
 
@@ -100,11 +101,12 @@ def hyperparams_test(model, n=20):
     )
 
 
-def label_tree_edit_distance(which):
+def label_tree_edit_distance(which, n=None):
+    # precompute tree edit distance
     output = f"data/tree_edit_{which}.jsonl"
     model = TreeEditDistance()
     with open(output, "w") as o:
-        for (s1, s2), label in tqdm.tqdm(three_class_data_iter(which)):
+        for (s1, s2), label in tqdm.tqdm(three_class_data_iter(which, n=n)):
             d = model.distance(s1, s2)
             print(str(d), file=o)
 
@@ -136,41 +138,54 @@ def tree_edit_distance_eval():
     )
 
 
+def train_full():
+    sentences, labels = defaultdict(list), defaultdict(list)
 
-# def generate_test_train_multimodel():
+    sentences_train, labels_train = [], []
+    for (s1, s2), label in three_class_data_iter("train", n=100000):
+        sentences["train"].append((s1, s2))
+        labels["train"].append(label)
+    sentences_dev, labels_dev = [], []
+    for (s1, s2), label in three_class_data_iter("dev"):
+        sentences["dev"].append((s1, s2))
+        labels["dev"].append(label)
+    sentences_test, labels_test = [], []
+    for (s1, s2), label in three_class_data_iter("test"):
+        sentences["test"].append((s1, s2))
+        labels["test"].append(label)
 
-#     models = [
-#         WVEditDistance.load(),
-#         TunedNormalizedLevenshtein(del_cost=.5),
-#         BipartiteGraphSim.load(),
-#         TreeEditDistance()
-#     ]
+    dfs = defaultdict(pd.DataFrame)
 
-#     Xs = []
-#     ys = []
+    # load tree edit distanc from precomputed
+    for which in ["train", "dev", "test"]:
+        with open(f"data/tree_edit_{which}.jsonl") as i:
+            dfs[which]["tree_edit_distance"] = [json.loads(line)[0] for line in i]
 
-#     for (s1, s2), label in tqdm.tqdm(three_class_data_iter("train")):
-#         ds = [model.distance(s1, s2) for model in models]
-#         Xs.append(d)
-#         ys.append(label)
+    # create parametrised features based on best performance on previous hyperparam opt runs
+    features = {
+        "wved": WVEditDistanceV2.load(**{"subs_cost": 1.902343873666979, "insert_cost": 1.3481990347842965, "del_cost": 0.07970709023722056}),
+        "bipartite_graph_matching": BipartiteGraphSim.load(),
+        "longest_common_subsequence": LongestCommonSubsequence(),
+        "char_based_tuned_levenshtein": CharBasedTunedLevenshtein(**{"del_cost": 0.22665831415016702, "insert_cost": 0.4379537631692163, "subs_cost": 1, "normalize": True}),
+        "length_diff": LengthDiff(),
+        "length_sum": LengthSum()
+    }
 
-#     results = []
+    for which in ["train", "dev", "test"]:
+        for feature_name, feature in features.items():
+            print(which, feature_name)
+            dfs[which][feature_name] = [feature.distance(s1, s2)[0] for s1, s2 in sentences[which]]
 
-#     for _ in tqdm.tqdm(range(20)):
-#         wved = WVEditDistance.load_random()
-#         cv_scores = evaluate(wved)["test_score"]
-#         results.append(
-#             {
-#                 "params": wved.params(),
-#                 "cv_scores": [float(score) for score in cv_scores],
-#                 "mean_score": float(np.mean(cv_scores))
-#             }
-#         )
+    clf = xgboost.XGBClassifier(n_estimators=200, max_depth=5)
+    fitted = clf.fit(dfs["train"], labels["train"])
+    dev_acc = fitted.score(dfs["dev"], labels["dev"])
+    test_acc = fitted.score(dfs["test"], labels["test"])
 
-#     print(
-#         json.dumps(sorted(results, key=lambda x: x["mean_score"], reverse=True))
-#     )
+    feature_importances = dict(zip(dfs["train"].columns, fitted.feature_importances_))
 
+    print(f"dev accuracy: {dev_acc}")
+    print(f"test accuracy: {test_acc}")
+    print(tabulate.tabulate(sorted(feature_importances.items(), key=lambda x: x[1], reverse=True)))
 
 
 if __name__ == "__main__":
@@ -183,3 +198,5 @@ if __name__ == "__main__":
 
     #label_tree_edit_distance("dev")
     #tree_edit_distance_eval()
+
+    label_tree_edit_distance("test", n=100000)
