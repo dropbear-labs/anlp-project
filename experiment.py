@@ -14,31 +14,12 @@ import sklearn.metrics as metrics
 
 from common import Sentence
 from word_vector_edit_distance import WVEditDistance, TunedNormalizedLevenshtein, CharBasedTunedLevenshtein, WVEditDistanceV2
-from bipartite_graph_similarity import BipartiteGraphSim, TunedBipartiteGraphSim
+from bipartite_graph_similarity import BipartiteGraphSim, TunedBipartiteGraphSim, FreqWeightedBipartiteGraphSim
 from tree_edit_distance import TreeEditDistance
 from string_distance import LongestCommonSubsequence, Bakkelund, LengthDiff, LengthSum
 
 
 base_path = Path("/home/nrg/datasets/snli_1.0/snli_1.0")
-
-
-def two_class_data_iter(which):
-    assert which in ["dev", "test", "train"]
-
-    f = base_path / f"snli_1.0_{which}.jsonl"
-
-    with f.open() as i:
-        for line in i:
-            loaded = json.loads(line)
-            if loaded["gold_label"] == "-":
-                continue
-            yield (
-                (
-                    Sentence(loaded["sentence1"], loaded["sentence1_parse"]),
-                    Sentence(loaded["sentence2"], loaded["sentence2_parse"])
-                ),
-                loaded["gold_label"] == "entailment"
-            )
 
 
 def three_class_data_iter(which, n=None):
@@ -47,8 +28,9 @@ def three_class_data_iter(which, n=None):
     f = base_path / f"snli_1.0_{which}.jsonl"
 
     with f.open() as i:
-        for line_idx, line in enumerate(i, start=1):
-            if n is not None and line_idx > n:
+        yielded = 0
+        for line in i:
+            if n is not None and yielded >= n:
                 break
             loaded = json.loads(line)
             if loaded["gold_label"] == "-":
@@ -60,6 +42,7 @@ def three_class_data_iter(which, n=None):
                 ),
                 loaded["gold_label"]
             )
+            yielded += 1
 
 
 def evaluate(model, which="dev"):
@@ -141,22 +124,19 @@ def tree_edit_distance_eval():
 def train_full():
     sentences, labels = defaultdict(list), defaultdict(list)
 
-    sentences_train, labels_train = [], []
     for (s1, s2), label in three_class_data_iter("train", n=100000):
         sentences["train"].append((s1, s2))
         labels["train"].append(label)
-    sentences_dev, labels_dev = [], []
     for (s1, s2), label in three_class_data_iter("dev"):
         sentences["dev"].append((s1, s2))
         labels["dev"].append(label)
-    sentences_test, labels_test = [], []
     for (s1, s2), label in three_class_data_iter("test"):
         sentences["test"].append((s1, s2))
         labels["test"].append(label)
 
     dfs = defaultdict(pd.DataFrame)
 
-    # load tree edit distanc from precomputed
+    # load tree edit distance from precomputed
     for which in ["train", "dev", "test"]:
         with open(f"data/tree_edit_{which}.jsonl") as i:
             dfs[which]["tree_edit_distance"] = [json.loads(line)[0] for line in i]
@@ -188,15 +168,50 @@ def train_full():
     print(tabulate.tabulate(sorted(feature_importances.items(), key=lambda x: x[1], reverse=True)))
 
 
+def generate_features_files():
+    # for sharing with others
+    sentences = defaultdict(list)
+    for (s1, s2), label in three_class_data_iter("train", n=100000):
+        sentences["train"].append((s1, s2))
+    for (s1, s2), label in three_class_data_iter("dev"):
+        sentences["dev"].append((s1, s2))
+    for (s1, s2), label in three_class_data_iter("test"):
+        sentences["test"].append((s1, s2))
+
+    # create parametrised features based on best performance on previous hyperparam opt runs
+    features = {
+        "wved": WVEditDistanceV2.load(**{"subs_cost": 1.902343873666979, "insert_cost": 1.3481990347842965, "del_cost": 0.07970709023722056}),
+        "bipartite_graph_matching": BipartiteGraphSim.load(),
+        "longest_common_subsequence": LongestCommonSubsequence(),
+        "char_based_tuned_levenshtein": CharBasedTunedLevenshtein(**{"del_cost": 0.22665831415016702, "insert_cost": 0.4379537631692163, "subs_cost": 1, "normalize": True}),
+        "length_diff": LengthDiff(),
+        "length_sum": LengthSum()
+        # skip Tree
+    }
+
+    dfs = defaultdict(pd.DataFrame)
+
+    for which in ["train", "dev", "test"]:
+        for feature_name, feature in features.items():
+            print(which, feature_name)
+            dfs[which][feature_name] = [feature.distance(s1, s2)[0] for s1, s2 in sentences[which]]
+
+    for which in ["train", "dev", "test"]:
+        np.save(f"data/features_{which}.npz", dfs[which].to_numpy())
+
+
 if __name__ == "__main__":
     #hyperparams_test(WVEditDistance)
     #hyperparams_test(TunedNormalizedLevenshtein)
-    #hyperparams_test(BipartiteGraphSim, n=1)
+    hyperparams_test(BipartiteGraphSim, n=1)
     #hyperparams_test(WVEditDistanceV2, n=10)
     #hyperparams_test(LongestCommonSubsequence, n=1)
     #hyperparams_test(Bakkelund, n=1)
+    #hyperparams_test(FreqWeightedBipartiteGraphSim, n=1)
+    #FreqWeightedBipartiteGraphSim
+
 
     #label_tree_edit_distance("dev")
     #tree_edit_distance_eval()
 
-    label_tree_edit_distance("test", n=100000)
+    #label_tree_edit_distance("test", n=100000)

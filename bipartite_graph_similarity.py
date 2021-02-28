@@ -4,8 +4,8 @@ from typing import Any
 
 import numpy as np
 import sklearn.preprocessing as pre
-
 import networkx as nx
+from wordfreq import zipf_frequency
 
 from common import Sentence, sigmoid
 
@@ -93,25 +93,14 @@ class TunedBipartiteGraphSim(BipartiteGraphSim):
         return sigmoid(self.w*dot + self.b)
 
 
-# @dataclass
-# class TunedBipartiteRBFGraphSim(BipartiteGraphSim):
-#     eps: float = 1
+@dataclass
+class FreqWeightedBipartiteGraphSim(BipartiteGraphSim):
+    def sim(self, w1, w2):
+        if w1 not in self.word_to_idx or w2 not in self.word_to_idx:
+            return 0
 
-#     @classmethod
-#     def load_random(cls):
-#         return cls.load(
-#             w=random.random()*20 - 10,
-#             b=random.random()*20 - 10,
-#         )
-
-#     def params(self):
-#         return {"w": self.w, "b": self.b}
-
-#     def sim(self, w1, w2):
-#         if w1 not in self.word_to_idx or w2 not in self.word_to_idx:
-#             return 0
-#         dot = np.dot(
-#             self.vectors[self.word_to_idx[w1]],
-#             self.vectors[self.word_to_idx[w2]]
-#         )
-#         return np.exp()
+        word_freq_factor = zipf_frequency(w1, "en") * zipf_frequency(w2, "en")
+        return (word_freq_factor) * np.dot(
+            self.vectors[self.word_to_idx[w1]],
+            self.vectors[self.word_to_idx[w2]]
+        )
