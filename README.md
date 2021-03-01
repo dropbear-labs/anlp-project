@@ -21,5 +21,5 @@
   
 ## 2. Combined model
 
-- [ANLP_final_NN.ipynb](ANLP_final_NN.ipynb) consist of the collection of models that we planned to use to solve the problem of Textual Entailment. They were later evaluated and tested in the file "ANLP_final_NN_Tunning_simple_LSTM_KERAS.ipynb". The results can be seen after testing.
+- [ANLP_final_NN.ipynb](ANLP_final_NN.ipynb) consist of the collection of models that we planned to use to solve the problem of Textual Entailment. They were later evaluated and tested in the file [ANLP_final_NN_Tunning_simple_LSTM_KERAS.ipynb](ANLP_final_NN_Tunning_simple_LSTM_KERAS.ipynb). The results can be seen after testing.
 
