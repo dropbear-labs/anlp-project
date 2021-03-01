@@ -11,6 +11,7 @@
 - [hyperparam_results/](hyperparam_results/) - saved results for different parameterizations of features
 - [string_distance.py](string_distance.py) - other string comparison features
 - [experiment.py](experiment.py) - code for the experiment on combined performance of document distances
+- [requirements.txt](requirements.txt) - dependencies for this part of the experiment
 
 ### References
 
