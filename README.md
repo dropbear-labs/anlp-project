@@ -10,7 +10,7 @@
 - [bipartite_graph_similarity.py](bipartite_graph_similarity.py) - bipartite graph similarity implementation
 - [hyperparam_results/](hyperparam_results/) - saved results for different parameterizations of features
 - [string_distance.py](string_distance.py) - other string comparison features
-- [experiment.py](experiment.py) - code for the experiment
+- [experiment.py](experiment.py) - code for the experiment on combined performance of document distances
 
 ### References
 
